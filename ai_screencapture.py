@@ -60,7 +60,7 @@ if __name__ == "__main__":
     #Get User Input
         user_input = input().strip().lower()
         if user_input == 'quit' or user_input == 'q':
-            if screen_agent.capture_process is not None: 
+            if screen_agent.capture_process is not None:  
                 screen_agent.capture_process.terminate()
             break
         elif user_input == 'run' or user_input == "r":

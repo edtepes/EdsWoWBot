@@ -77,8 +77,10 @@ if __name__ == "__main__":
             if screen_agent.capture_process is None:
                 print(f'{bcolors.YELLOW}WARNING:{bcolors.ENDC} Capture process is not running.')
                 continue
+            screen_agent.capture_process.terminate()
+            screen_agent.capture_process = None
         else:
             print(f'{bcolors.RED}ERROR:{bcolors.ENDC} Invalid selection.')
-    #Start/Stop/Quit 
+    #Start/Stop/Quit  
 
 print("Done.")

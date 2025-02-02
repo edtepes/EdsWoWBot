@@ -25,6 +25,22 @@ class ScreenCaptureAgent:
                 
                 if self.enable_cv_preview:
                     small = cv.resize(self.img, (0, 0), fx = 0.5, fy = 0.5) #small version of the screen image (a resize using scalars)
+
+                    if self.fps is None:
+                        fps_text = ""
+                    else:
+                        fps_text = f'FPS: {self.fps:.2f}'
+                    
+                    cv.putText(
+                        small,
+                        fps_text,
+                        (25,50),
+                        cv.FONT_HERSHEY_DUPLEX,
+                        1,
+                        (255,0,255),
+                        1,
+                        cv.LINE_AA
+                    )
                     cv.imshow("Computer Vision", small) #displaying the image on the screen
                     key = cv.waitKey(1) #introducing a 1ms delay so that we can see the screen or it will disapear to quickly
                 

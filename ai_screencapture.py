@@ -52,15 +52,23 @@ def print_menu():
     print(f'\tq - quit\t Quit the program')
 
 if __name__ == "__main__":
+    screen_agent = ScreenCaptureAgent()
+    
     while True:
     #Print Menu to User
         print_menu()
     #Get User Input
         user_input = input().strip().lower()
         if user_input == 'quit' or user_input == 'q':
+            screen_agent.capture_process.terminate()
             break
         elif user_input == 'run' or user_input == "r":
-            pass
+            screen_agent.capture_process = multiprocessing.Process(
+                target = screen_agent.capture_screen, #no () needed as we are passing the function, not the result of the function 
+                args=(),
+                name="screen capture process"
+            )
+            screen_agent.capture_process.start()
         elif user_input == 'stop' or user_input == "s":
             pass
         else:

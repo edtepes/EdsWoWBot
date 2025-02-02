@@ -60,9 +60,13 @@ if __name__ == "__main__":
     #Get User Input
         user_input = input().strip().lower()
         if user_input == 'quit' or user_input == 'q':
-            screen_agent.capture_process.terminate()
+            if screen_agent.capture_process is not None: 
+                screen_agent.capture_process.terminate()
             break
         elif user_input == 'run' or user_input == "r":
+            if screen_agent.capture_process is not None:
+                print(f'{bcolors.YELLOW}WARNING:{bcolors.ENDC} Capture process is already running.')
+                continue
             screen_agent.capture_process = multiprocessing.Process(
                 target = screen_agent.capture_screen, #no () needed as we are passing the function, not the result of the function 
                 args=(),
@@ -70,7 +74,9 @@ if __name__ == "__main__":
             )
             screen_agent.capture_process.start()
         elif user_input == 'stop' or user_input == "s":
-            pass
+            if screen_agent.capture_process is None:
+                print(f'{bcolors.YELLOW}WARNING:{bcolors.ENDC} Capture process is not running.')
+                continue
         else:
             print(f'{bcolors.RED}ERROR:{bcolors.ENDC} Invalid selection.')
     #Start/Stop/Quit 

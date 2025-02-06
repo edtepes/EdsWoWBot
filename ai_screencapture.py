@@ -8,6 +8,8 @@ class ScreenCaptureAgent:
         self.img = None
         self.img_health = None
         self.img_health_HSV = None #HSV version of the image to help us differentiate the health colors
+        self.img_mana = None
+        self.img_mana_HSV = None #HSV version of the image to help us differentiate the mana colors
         self.capture_process = None
         self.fps = None
         self.enable_cv_preview = True #we can turn on and off our computer vision (might want to display this or not depending on PC resources)
@@ -15,6 +17,10 @@ class ScreenCaptureAgent:
         #HEALTH DETECTION
         self.health_top_left = (498, 799)
         self.health_bottom_right = (744, 830)
+
+        #MANA DETECTION
+        self.mana_top_left = (499, 834)
+        self.mana_bottom_right = (744, 843)
         
         #LOCATION DETECTION
         self.zone = None
@@ -37,10 +43,17 @@ class ScreenCaptureAgent:
                     self.health_top_left[0]:self.health_bottom_right[0]
                 ]
 
+                self.img_mana = self.img[
+                    self.mana_top_left[1]:self.mana_bottom_right[1],
+                    self.mana_top_left[0]:self.mana_bottom_right[0]
+                ]
+
                 self.zone = map_reader.get_cur_zone(self.img)
                 self.zone = self.zone.lower().strip()
 
                 self.img_health_HSV = cv.cvtColor(self.img_health, cv.COLOR_BGR2HSV)
+                self.img_mana_HSV = cv.cvtColor(self.img_mana, cv.COLOR_BGR2HSV)
+
 
                 if self.enable_cv_preview:
                     small = cv.resize(self.img, (0, 0), fx = 0.5, fy = 0.5) #small version of the screen image (a resize using scalars)
@@ -53,7 +66,7 @@ class ScreenCaptureAgent:
                     cv.putText(
                         small,
                         fps_text,
-                        (25,40),
+                        (25,20),
                         cv.FONT_HERSHEY_DUPLEX,
                         0.75,
                         (255,0,255),
@@ -63,7 +76,17 @@ class ScreenCaptureAgent:
                     cv.putText(
                         small,
                         "Health: " + str(hue_match_pct(self.img_health_HSV, 238, 242)),
-                        (25,80),
+                        (25,40),
+                        cv.FONT_HERSHEY_DUPLEX,
+                        0.75,
+                        (0,0,255),
+                        1,
+                        cv.LINE_AA
+                    )
+                    cv.putText(
+                        small,
+                        "Mana: " + str(hue_match_pct(self.img_mana_HSV, 212, 216)),
+                        (25,60),
                         cv.FONT_HERSHEY_DUPLEX,
                         0.75,
                         (0,0,255),
@@ -73,7 +96,7 @@ class ScreenCaptureAgent:
                     cv.putText(
                         small,
                         "Location: " + self.zone,
-                        (25,120),
+                        (25,80),
                         cv.FONT_HERSHEY_DUPLEX,
                         0.75,
                         (0,0,255),
@@ -82,6 +105,7 @@ class ScreenCaptureAgent:
                     )
                     cv.imshow("Computer Vision", small) #displaying the image on the screen
                     cv.imshow("Health Bar",self.img_health) #displaying rectangle for health in seperate window
+                    cv.imshow("Mana Bar",self.img_mana) #displaying rectangle for health in seperate window
                     key = cv.waitKey(1) #introducing a 1ms delay so that we can see the screen or it will disapear to quickly
                 
                 elapsed_time = time.time() - fps_report_time #total time in seconds (since we started to run program)

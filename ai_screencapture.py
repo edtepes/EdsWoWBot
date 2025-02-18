@@ -40,7 +40,7 @@ class ScreenCaptureAgent:
         fps_report_time = time.time()  # last FPS report time
         fps_report_delay = 5           # report average FPS every 5 seconds 
         n_frames = 1
-        ocr_interval = 5.0             # run OCR at most every 2 seconds
+        ocr_interval = 5.0             # run OCR at most every N seconds
         last_ocr_time = time.time()    # timestamp of the last OCR request
 
         with mss.mss() as sct:

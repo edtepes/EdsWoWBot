@@ -135,7 +135,6 @@ def print_menu():
     print(f'\tq - quit\t Quit the program')
 
 if __name__ == "__main__":
-    # No longer need to create an instance here for launching the process
     capture_process = None
     while True:
         print_menu()

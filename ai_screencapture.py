@@ -1,120 +1,105 @@
 #! /usr/bin/python3
-import mss, pyautogui, cv2 as cv, numpy as np, time, multiprocessing
-
+import mss, pyautogui, cv2 as cv, numpy as np, time, multiprocessing, threading, queue
 import map_reader
+
+def run_capture():
+    agent = ScreenCaptureAgent()
+    agent.capture_screen()
 
 class ScreenCaptureAgent:
     def __init__(self) -> None:
         self.img = None
         self.img_health = None
-        self.img_health_HSV = None #HSV version of the image to help us differentiate the health colors
+        self.img_health_HSV = None  # HSV version for health colors
         self.img_mana = None
-        self.img_mana_HSV = None #HSV version of the image to help us differentiate the mana colors
-        self.capture_process = None
+        self.img_mana_HSV = None    # HSV version for mana colors
         self.fps = None
-        self.enable_cv_preview = True #we can turn on and off our computer vision (might want to display this or not depending on PC resources)
+        self.enable_cv_preview = True  # Toggle CV preview
 
-        #HEALTH DETECTION
+        # HEALTH DETECTION
         self.health_top_left = (498, 799)
         self.health_bottom_right = (744, 830)
 
-        #MANA DETECTION
+        # MANA DETECTION
         self.mana_top_left = (499, 834)
         self.mana_bottom_right = (744, 843)
         
-        #LOCATION DETECTION
-        self.zone = None
+        # LOCATION DETECTION (OCR result)
+        self.zone = ""
 
         self.w, self.h = pyautogui.size()
-        print("Screen Resolution: " + "w: " + str(self.w) + " h:" + str(self.h)) 
-        self.monitor = {"top":0, "left": 0, "width": self.w, "height": self.h}
+        print("Screen Resolution: w:" + str(self.w) + " h:" + str(self.h)) 
+        self.monitor = {"top": 0, "left": 0, "width": self.w, "height": self.h}
+
+        # Set up OCR queue and thread
+        self.ocr_queue = queue.Queue(maxsize=1)  # Only keep the most recent frame
+        self.ocr_thread = threading.Thread(target=self.ocr_worker, daemon=True)
+        self.ocr_thread.start()
 
     def capture_screen(self):
-        fps_report_time = time.time() #checks when was the last time we reported the fps
-        fps_report_delay = 5          #lets us show an avg fps from the last 5 seconds 
+        fps_report_time = time.time()  # last FPS report time
+        fps_report_delay = 5           # report every 5 seconds 
         n_frames = 1
         with mss.mss() as sct:
             while True:
                 self.img = sct.grab(self.monitor)
-                self.img  = np.array(self.img) #takes that data and converts it to numpy array. Converting from rgb to bgr is not needed thanks to the grab function, since screenshot apps and opencv both work in bgr
+                self.img = np.array(self.img)
                 
                 self.img_health = self.img[
                     self.health_top_left[1]:self.health_bottom_right[1],
                     self.health_top_left[0]:self.health_bottom_right[0]
                 ]
-
                 self.img_mana = self.img[
                     self.mana_top_left[1]:self.mana_bottom_right[1],
                     self.mana_top_left[0]:self.mana_bottom_right[0]
                 ]
-
-                self.zone = map_reader.get_cur_zone(self.img)
-                self.zone = self.zone.lower().strip()
-
+                
                 self.img_health_HSV = cv.cvtColor(self.img_health, cv.COLOR_BGR2HSV)
                 self.img_mana_HSV = cv.cvtColor(self.img_mana, cv.COLOR_BGR2HSV)
 
+                # Enqueue image for OCR processing (asynchronously)
+                try:
+                    if self.ocr_queue.full():
+                        self.ocr_queue.get_nowait()  # discard old frame
+                    self.ocr_queue.put_nowait(self.img.copy())
+                except queue.Full:
+                    pass
 
                 if self.enable_cv_preview:
-                    small = cv.resize(self.img, (0, 0), fx = 0.5, fy = 0.5) #small version of the screen image (a resize using scalars)
-
-                    if self.fps is None:
-                        fps_text = ""
-                    else:
-                        fps_text = f'FPS: {self.fps:.2f}'
+                    small = cv.resize(self.img, (0, 0), fx=0.5, fy=0.5)  # Create a smaller preview version
+                    fps_text = "" if self.fps is None else f'FPS: {self.fps:.2f}'
                     
-                    cv.putText(
-                        small,
-                        fps_text,
-                        (25,20),
-                        cv.FONT_HERSHEY_DUPLEX,
-                        0.75,
-                        (255,0,255),
-                        1,
-                        cv.LINE_AA
-                    )
-                    cv.putText(
-                        small,
-                        "Health: " + str(hue_match_pct(self.img_health_HSV, 238, 242)),
-                        (25,40),
-                        cv.FONT_HERSHEY_DUPLEX,
-                        0.75,
-                        (0,0,255),
-                        1,
-                        cv.LINE_AA
-                    )
-                    cv.putText(
-                        small,
-                        "Mana: " + str(hue_match_pct(self.img_mana_HSV, 212, 216)),
-                        (25,60),
-                        cv.FONT_HERSHEY_DUPLEX,
-                        0.75,
-                        (0,0,255),
-                        1,
-                        cv.LINE_AA
-                    )
-                    cv.putText(
-                        small,
-                        "Location: " + self.zone,
-                        (25,80),
-                        cv.FONT_HERSHEY_DUPLEX,
-                        0.75,
-                        (0,0,255),
-                        1,
-                        cv.LINE_AA
-                    )
-                    cv.imshow("Computer Vision", small) #displaying the image on the screen
-                    cv.imshow("Health Bar",self.img_health) #displaying rectangle for health in seperate window
-                    cv.imshow("Mana Bar",self.img_mana) #displaying rectangle for health in seperate window
-                    key = cv.waitKey(1) #introducing a 1ms delay so that we can see the screen or it will disapear to quickly
-                
-                elapsed_time = time.time() - fps_report_time #total time in seconds (since we started to run program)
+                    cv.putText(small, fps_text, (25,20), cv.FONT_HERSHEY_DUPLEX, 0.75, (255,0,255), 1, cv.LINE_AA)
+                    cv.putText(small, "Health: " + str(hue_match_pct(self.img_health_HSV, 238, 242)),
+                               (25,40), cv.FONT_HERSHEY_DUPLEX, 0.75, (0,0,255), 1, cv.LINE_AA)
+                    cv.putText(small, "Mana: " + str(hue_match_pct(self.img_mana_HSV, 212, 216)),
+                               (25,60), cv.FONT_HERSHEY_DUPLEX, 0.75, (0,0,255), 1, cv.LINE_AA)
+                    cv.putText(small, "Location: " + self.zone, (25,80),
+                               cv.FONT_HERSHEY_DUPLEX, 0.75, (0,0,255), 1, cv.LINE_AA)
+                    
+                    cv.imshow("Computer Vision", small)
+                    cv.imshow("Health Bar", self.img_health)
+                    cv.imshow("Mana Bar", self.img_mana)
+                    cv.waitKey(1)  # Short delay so the windows update
+
+                elapsed_time = time.time() - fps_report_time
                 if elapsed_time >= fps_report_delay:
-                    self.fps = (n_frames / elapsed_time) #frames per second
+                    self.fps = n_frames / elapsed_time
                     print("FPS: " + str(self.fps))
                     n_frames = 0
                     fps_report_time = time.time()
                 n_frames += 1
+
+    def ocr_worker(self):
+        """Background thread to process OCR without blocking the capture loop."""
+        while True:
+            try:
+                img = self.ocr_queue.get(timeout=1)
+            except queue.Empty:
+                continue
+            # Use the map_reader OCR function on the image
+            zone_text = map_reader.get_cur_zone(img)
+            self.zone = zone_text.lower().strip()
 
 class bcolors:
     PINK = '\033[95m'
@@ -126,7 +111,7 @@ class bcolors:
     ENDC  = '\033[0m'
 
 def convert_hue(hue):
-    #gets the ratio of the HSV color to what OpenCV has for its color limits
+    # Gets the ratio of the HSV color to what OpenCV uses
     ratio = 361/180
     return np.round(hue / ratio, 2)
 
@@ -138,11 +123,10 @@ def hue_match_pct(img, hue_low, hue_high):
             if convert_hue(hue_low) <= h <= convert_hue(hue_high):
                 match_pixels += 1
             else:
-                no_match_pixels +=1
+                no_match_pixels += 1
     total_pixels = match_pixels + no_match_pixels
     pct_health = np.round(match_pixels / total_pixels, 2) * 100
     return pct_health
-
 
 def print_menu():
     print(f'{bcolors.CYAN}Command Menu{bcolors.ENDC}')
@@ -151,35 +135,29 @@ def print_menu():
     print(f'\tq - quit\t Quit the program')
 
 if __name__ == "__main__":
-    screen_agent = ScreenCaptureAgent()
-    
+    capture_process = None
     while True:
-    #Print Menu to User
         print_menu()
-    #Get User Input
         user_input = input().strip().lower()
-        if user_input == 'quit' or user_input == 'q':
-            if screen_agent.capture_process is not None:  
-                screen_agent.capture_process.terminate()
+        if user_input in ['quit', 'q']:
+            if capture_process is not None:
+                capture_process.terminate()
             break
-        elif user_input == 'run' or user_input == "r":
-            if screen_agent.capture_process is not None:
+        elif user_input in ['run', 'r']:
+            if capture_process is not None:
                 print(f'{bcolors.YELLOW}WARNING:{bcolors.ENDC} Capture process is already running.')
                 continue
-            screen_agent.capture_process = multiprocessing.Process(
-                target = screen_agent.capture_screen, #no () needed as we are passing the function, not the result of the function 
-                args=(),
+            capture_process = multiprocessing.Process(
+                target=run_capture,
                 name="screen capture process"
             )
-            screen_agent.capture_process.start()
-        elif user_input == 'stop' or user_input == "s":
-            if screen_agent.capture_process is None:
+            capture_process.start()
+        elif user_input in ['stop', 's']:
+            if capture_process is None:
                 print(f'{bcolors.YELLOW}WARNING:{bcolors.ENDC} Capture process is not running.')
                 continue
-            screen_agent.capture_process.terminate()
-            screen_agent.capture_process = None
+            capture_process.terminate()
+            capture_process = None
         else:
             print(f'{bcolors.RED}ERROR:{bcolors.ENDC} Invalid selection.')
-    #Start/Stop/Quit  
-
-print("Done.")
+    print("Done.")

@@ -38,8 +38,11 @@ class ScreenCaptureAgent:
 
     def capture_screen(self):
         fps_report_time = time.time()  # last FPS report time
-        fps_report_delay = 5           # report every 5 seconds 
+        fps_report_delay = 5           # report average FPS every 5 seconds 
         n_frames = 1
+        ocr_interval = 5.0             # run OCR at most every N seconds
+        last_ocr_time = time.time()    # timestamp of the last OCR request
+
         with mss.mss() as sct:
             while True:
                 self.img = sct.grab(self.monitor)
@@ -57,13 +60,16 @@ class ScreenCaptureAgent:
                 self.img_health_HSV = cv.cvtColor(self.img_health, cv.COLOR_BGR2HSV)
                 self.img_mana_HSV = cv.cvtColor(self.img_mana, cv.COLOR_BGR2HSV)
 
-                # Enqueue image for OCR processing (asynchronously)
-                try:
-                    if self.ocr_queue.full():
-                        self.ocr_queue.get_nowait()  # discard old frame
-                    self.ocr_queue.put_nowait(self.img.copy())
-                except queue.Full:
-                    pass
+                #OCR QUEUE
+                current_time = time.time()
+                if (current_time - last_ocr_time) >= ocr_interval:
+                    last_ocr_time = current_time
+                    try:
+                        if self.ocr_queue.full():
+                            self.ocr_queue.get_nowait()  # discard old frame if needed
+                        self.ocr_queue.put_nowait(self.img.copy())
+                    except queue.Full:
+                        pass
 
                 if self.enable_cv_preview:
                     small = cv.resize(self.img, (0, 0), fx=0.5, fy=0.5)  # Create a smaller preview version
